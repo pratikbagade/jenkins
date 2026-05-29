@@ -1,0 +1,123 @@
+pipeline {
+    agent any
+    environment {
+        APP_NAME = 'my-app1'
+        ARTIFACT_NAME = 'my-app-artifact1.tar.gz'
+        CACHE_FILE = 'dependency-cache.txt'
+    }
+    parameters {
+        string(name: 'BRANCH_NAME', defaultValue: 'main', description: 'Git branch to build')
+        choice(name: 'ENVIRONMENT', choices: ['dev', 'staging', 'prod'], description: 'Deployment environment')
+        booleanParam(name: 'DEBUG_MODE', defaultValue: false, description: 'Enable debug mode')
+    }
+    stages {
+        stage('clone the code fro git repo') {
+            steps {
+                git branch: "${params.BRANCH_NAME}",
+                url: 'https://github.com/pratikbagade/DevOpsCodeDemo.git'
+            }
+        }
+        stage('Debug info'){
+            when {
+                expression { return params.DEBUG_MODE == true }
+            }
+            steps {
+                echo "Branch: ${params.BRANCH_NAME}"
+                echo "Environment: ${params.ENVIRONMENT}"
+                echo "Build number: ${env.BUILD_NUMBER}"
+                echo "Workspace: ${env.WORKSPACE}"
+            }
+        }
+        stage('Load Dependencies'){
+            steps{
+                sh '''
+                    if [ -f "$CACHE_FILE" ]; then
+                        echo "Loading dependencies from cache"
+                        cat ${CACHE_FILE}
+                    else
+                        echo "No cache found, installing dependencies"
+                        # Simulate dependency installation
+                        echo "dependency1" > $CACHE_FILE
+                        echo "dependency2" >> $CACHE_FILE
+                        echo "Dependencies installed and cached"
+                    fi
+                    '''
+            }
+        }
+        stage('Unit Tests') {
+            steps {
+                retry(2) {
+                sh '''
+                    echo "Branch : $BRANCH_NAME"
+                    echo "Environment: $ENVIRONMENT"
+                    echo "Debug Mode: $DEBUG_MODE"
+
+                    echo "Starting unit test for ${APP_NAME}"
+                    # Add commands to run unit tests for service
+
+                    #Task 1
+                        echo "Test 1 checking workspace"
+                    if [ -d "$WORKSPACE" ]; then
+                        ls $WORKSPACE
+                    echo "Workspace exists"
+                    else
+                        echo "Workspace does not exist"
+                        exit 1
+                    fi
+
+                    #Task 2
+                        echo "Test 2 checking for pom.xml file"
+                        if [ -f "pom.xml" ]; then
+                            echo "pom.xml file exists"
+                        else
+                            echo "pom.xml file does not exist"
+                            exit 1
+                        fi
+
+                    #Task 3
+                        echo "Test 3 Reading Readme file"
+                        if [ -f "README.md" ]; then
+                        echo "README found"
+                        else 
+                            echo "README file not found"
+                            exit 1
+                        fi
+                        echo "Unit tests for service A completed"
+                    '''
+                         }
+                    }
+                }
+            stage('create build artifacts') {
+                steps {
+                    sh "tar -czf ${env.ARTIFACT_NAME} *"
+                    echo "Artifacts ${env.ARTIFACT_NAME} created successfully"
+                }  
+            }
+            stage('Archive Artifacts') {
+                steps {
+                    archiveArtifacts artifacts: "${env.ARTIFACT_NAME}", fingerprint: true
+                    echo "Artifacts ${env.ARTIFACT_NAME} archived successfully"
+                } 
+        }
+        // statisfying when conddtion skiping staging and dev
+        stage('prod deployement'){
+            when {
+                expression { return params.ENVIRONMENT == 'prod' }
+            }
+            steps {
+                echo "prod deployement started for ${APP_NAME}"
+                echo "Branch: ${params.BRANCH_NAME}"
+                echo "Build number: ${env.BUILD_NUMBER}"
+                echo "Deploying ${APP_NAME} to production environment"
+                }
+            }
+    }
+        post {
+            success {
+                echo "Pipeline executed successfully for ${APP_NAME} on branch ${params.BRANCH_NAME} in ${params.ENVIRONMENT} environment"
+            }
+            failure {
+                echo "Pipeline failed for ${APP_NAME} on branch ${params.BRANCH_NAME} in ${params.ENVIRONMENT} environment"
+            }
+        }       
+}   
